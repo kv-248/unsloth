@@ -6,7 +6,7 @@
 import functools
 import inspect
 from pathlib import Path
-from typing import Any, Callable, Optional, get_args, get_origin
+from typing import Any, Callable, List, Optional, get_args, get_origin
 
 import typer
 from pydantic import BaseModel
@@ -35,8 +35,17 @@ def _is_bool_field(annotation: Any) -> bool:
 
 
 def _is_list_type(annotation: Any) -> bool:
-    """Check if type is a List."""
-    return get_origin(annotation) is list
+    """Check if type is a list (including Optional[List[...]])."""
+    return get_origin(_unwrap_optional(annotation)) is list
+
+
+def _get_list_item_type(annotation: Any) -> type:
+    """Get the Python type for a list field's items."""
+    unwrapped = _unwrap_optional(annotation)
+    args = get_args(unwrapped)
+    if not args:
+        return str
+    return _get_python_type(args[0])
 
 
 def _get_python_type(annotation: Any) -> type:
@@ -80,9 +89,7 @@ def add_options_from_config(config_class: type[BaseModel]) -> Callable:
     which will receive a dict of all CLI-provided config values.
     """
     fields = _collect_config_fields(config_class)
-    field_names = {
-        name for name, field_info in fields if not _is_list_type(field_info.annotation)
-    }
+    field_names = {name for name, _ in fields}
 
     def decorator(func: Callable) -> Callable:
         sig = inspect.signature(func)
@@ -97,13 +104,19 @@ def add_options_from_config(config_class: type[BaseModel]) -> Callable:
             if field_name in original_param_names:
                 continue
             annotation = field_info.annotation
-            if _is_list_type(annotation):
-                continue
-
             flag_name = _python_name_to_cli_flag(field_name)
             help_text = field_info.description or ""
 
-            if _is_bool_field(annotation):
+            if _is_list_type(annotation):
+                item_type = _get_list_item_type(annotation)
+                default = typer.Option(None, flag_name, help = help_text)
+                param = inspect.Parameter(
+                    field_name,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    default = default,
+                    annotation = Optional[List[item_type]],
+                )
+            elif _is_bool_field(annotation):
                 default = typer.Option(
                     None,
                     f"{flag_name}/--no-{field_name.replace('_', '-')}",
