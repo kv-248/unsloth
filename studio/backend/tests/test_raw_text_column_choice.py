@@ -51,6 +51,23 @@ def test_raw_text_scores_unspaced_scripts_by_length_not_by_spaces():
     assert list(result.dataset["text"]) == [doc, doc]
 
 
+def test_raw_text_scores_unspaced_hangul_by_character_not_by_sixteen():
+    """Hangul is CJK: a Korean document must beat a shorter spaced label.
+
+    The scorer counts Han, kana and Thai per character, but the class stopped at
+    U+9FFF and resumed at the compatibility ideographs, skipping the Hangul
+    syllable block. Those characters then fell through to the 16-character
+    fallback, so 30 syllables scored as 2 units and lost to a 3-word label.
+    """
+    doc = "자연어처리는컴퓨터과학분야와인공지능분야에서중요한방향입니다"
+    label = "news article label"
+    result = prepare_raw_text_dataset(
+        Dataset.from_dict({"content": [doc, doc], "source": [label, label]})
+    )
+    assert result.source_column == "content"
+    assert list(result.dataset["text"]) == [doc, doc]
+
+
 def test_raw_format_eval_split_reuses_the_train_column():
     from utils.datasets.dataset_utils import format_and_template_dataset
 

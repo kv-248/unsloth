@@ -65,8 +65,8 @@ def _text_columns(dataset: Dataset, string_cols: list[str]) -> list[str]:
     return [col for col in string_cols if col not in typed] or string_cols
 
 
-# CJK/kana/Thai count per character, else per word; unspaced runs count per 16 chars.
-_UNSPACED = "\u0e00-\u0e7f\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff"
+# Han, Hangul syllables, kana and Thai count per character, else per word; unspaced runs count per 16 chars.
+_UNSPACED = "\u0e00-\u0e7f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uf900-\ufaff"
 _TEXT_UNIT = re.compile(f"[{_UNSPACED}]|[^\\s{_UNSPACED}]{{1,16}}")
 
 
