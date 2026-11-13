@@ -89,7 +89,12 @@ def build_default_output_dir_name(
     max_project_chars = (
         _MAX_RUN_DIR_NAME_CHARS - len("model") - len(_PROJECT_MARKER) - len(timestamp_suffix)
     )
-    project_slug = _trim_segment(project_slug, max_project_chars) or "project"
+    # Same escape as the model segment. The inverse keeps the rightmost unescaped
+    # `__project-`, so a slug that still contains one is read as the separator and the
+    # model comes back with the slug's head attached (`my__project-demo` -> `...__project-my`).
+    project_slug = (
+        _trim_segment(_escape_project_marker(project_slug), max_project_chars) or "project"
+    )
     project_suffix = f"{_PROJECT_MARKER}{project_slug}{timestamp_suffix}"
     max_model_chars = _MAX_RUN_DIR_NAME_CHARS - len(project_suffix)
     model_segment = _trim_segment(model_segment, max_model_chars) or "model"

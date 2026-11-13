@@ -5,6 +5,7 @@ import json
 
 from storage.studio_db import _extract_project_name_from_config_json
 from utils.training_runs import (
+    base_model_from_run_dir_name,
     build_default_output_dir_name,
     model_segment_from_default_output_dir_name,
     normalize_project_name,
@@ -89,6 +90,45 @@ def test_model_segment_strips_project_slug_after_escaped_model_marker():
 
     assert output_dir == "org_foo__project--bar__project-customer-support_1771227800"
     assert model_segment_from_default_output_dir_name(output_dir) == "org_foo__project-bar"
+
+
+def test_project_slug_containing_the_marker_does_not_become_part_of_the_model():
+    """The slug is the other side of the separator. Leaving `__project-` in it makes the
+    rightmost copy win, so `my__project-demo` is parsed as model `...__project-my`."""
+    output_dir = build_default_output_dir_name(
+        "unsloth/Qwen3-8B",
+        "my__project-demo",
+        timestamp = 1771227800,
+    )
+
+    assert output_dir == "unsloth_Qwen3-8B__project-my__project--demo_1771227800"
+    assert model_segment_from_default_output_dir_name(output_dir) == "unsloth_Qwen3-8B"
+    assert base_model_from_run_dir_name(output_dir) == "unsloth/Qwen3-8B"
+
+
+def test_marker_in_the_model_name_and_the_project_slug_both_round_trip():
+    output_dir = build_default_output_dir_name(
+        "org/foo__project-bar",
+        "run__project-2",
+        timestamp = 1771227800,
+    )
+
+    assert output_dir == "org_foo__project--bar__project-run__project--2_1771227800"
+    assert model_segment_from_default_output_dir_name(output_dir) == "org_foo__project-bar"
+
+
+def test_escaped_project_slug_still_fits_the_directory_limit(tmp_path):
+    output_dir = build_default_output_dir_name(
+        "a" * 240,
+        "__project-x" * 40,
+        timestamp = 1771227800,
+    )
+
+    assert len(output_dir.encode()) <= 255
+    segment = model_segment_from_default_output_dir_name(output_dir)
+    assert segment is not None
+    assert "__project-" not in segment
+    (tmp_path / output_dir).mkdir()
 
 
 def test_extract_project_name_from_config_json_returns_normalized_name():

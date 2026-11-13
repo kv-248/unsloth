@@ -100,7 +100,10 @@ def test_base_model_from_run_dir_name(dir_name, expected):
         "unsloth/Llama-3.2-3B-Instruct",
     ],
 )
-@pytest.mark.parametrize("project_name", [None, "Demo Project", "customer support"])
+@pytest.mark.parametrize(
+    "project_name",
+    [None, "Demo Project", "customer support", "my__project-demo"],
+)
 def test_a_generated_run_dir_name_parses_back_to_its_model(repo_id, project_name):
     """The parser is the generator read backwards; this is what stops the two drifting."""
     dir_name = build_default_output_dir_name(repo_id, project_name, timestamp = 1771227800)
