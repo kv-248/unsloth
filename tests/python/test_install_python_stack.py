@@ -297,6 +297,22 @@ class TestUvSafePath:
         p = "/nonexistent dir/constraints.txt"
         assert ips._uv_safe_path(p) == p
 
+    @pytest.mark.skipif(ips.IS_WINDOWS, reason = "POSIX temp-copy fallback")
+    @pytest.mark.parametrize("gap", ["\t", "\n", "\u00a0"])
+    def test_posix_whitespace_directory_keeps_relative_requirements(self, tmp_path, gap):
+        """uv splits UV_OVERRIDE on every whitespace character, not only U+0020."""
+        src = tmp_path / f"Open{gap}Source" / "constraints.txt"
+        src.parent.mkdir(parents = True)
+        src.write_text("-r child.txt\n")
+        (src.parent / "child.txt").write_text("torch>=2.6\n")
+
+        out = ips._uv_safe_path(str(src))
+
+        assert not any(ch.isspace() for ch in out), f"uv would split this path: {out!r}"
+        assert out != str(src)
+        assert Path(out).read_text() == "-r child.txt\n"
+        assert (Path(out).parent / "child.txt").read_text() == "torch>=2.6\n"
+
 
 class TestUvSafePathHardening:
     """Edge cases for uv_safe_path + the UV_OVERRIDE channel (issue #6503)."""
@@ -406,6 +422,54 @@ class TestUvSafePathWindowsNo8dot3:
         monkeypatch.setattr(uvps, "IS_WINDOWS", True)
         monkeypatch.setattr(uvps, "_windows_short_path", lambda s: None, raising = False)
         monkeypatch.setattr(uvps.tempfile, "mkdtemp", lambda *a, **k: str(spaced_tmp))
+
+        assert uvps.uv_safe_path(str(src)) == str(src)
+
+    @pytest.mark.parametrize("gap", ["\t", "\n", "\u00a0"])
+    def test_non_space_whitespace_is_not_handed_to_uv(self, tmp_path, monkeypatch, gap):
+        """A tab, newline or U+00A0 is a UV_OVERRIDE separator the same way a space is."""
+        from backend.utils import uv_path_safety as uvps
+
+        src = tmp_path / f"Program{gap}Files" / f"constraints{gap}file.txt"
+        src.parent.mkdir(parents = True)
+        src.write_text("idna<4\n")
+        monkeypatch.setattr(uvps, "IS_WINDOWS", True)
+        monkeypatch.setattr(uvps, "_windows_short_path", lambda s: None, raising = False)
+
+        out = uvps.uv_safe_path(str(src))
+
+        assert not any(ch.isspace() for ch in out), f"uv would split this path: {out!r}"
+        assert Path(out).read_text() == "idna<4\n"
+        assert any(out.startswith(d) for d in uvps._UV_SAFE_PATH_TMPDIRS)
+
+    def test_whitespace_short_name_is_not_used(self, tmp_path, monkeypatch):
+        """An 8.3 alias that still contains whitespace is not a path uv can read."""
+        from backend.utils import uv_path_safety as uvps
+
+        src = tmp_path / "Program\tFiles" / "constraints.txt"
+        src.parent.mkdir(parents = True)
+        src.write_text("idna<4\n")
+        monkeypatch.setattr(uvps, "IS_WINDOWS", True)
+        monkeypatch.setattr(
+            uvps, "_windows_short_path", lambda s: "C:\\PROGRA~1\\foo\tbar.txt", raising = False
+        )
+
+        out = uvps.uv_safe_path(str(src))
+
+        assert out != "C:\\PROGRA~1\\foo\tbar.txt"
+        assert not any(ch.isspace() for ch in out), f"uv would split this path: {out!r}"
+        assert Path(out).read_text() == "idna<4\n"
+
+    def test_tab_temp_without_short_name_keeps_the_original(self, tmp_path, monkeypatch):
+        """A temp dir whose name uv would split is not where the copy is written."""
+        from backend.utils import uv_path_safety as uvps
+
+        src = self._spaced_constraints(tmp_path)
+        tab_tmp = tmp_path / "First\tLast" / "Temp"
+        tab_tmp.mkdir(parents = True)
+        monkeypatch.setattr(uvps, "IS_WINDOWS", True)
+        monkeypatch.setattr(uvps, "_windows_short_path", lambda s: None, raising = False)
+        monkeypatch.setattr(uvps.tempfile, "mkdtemp", lambda *a, **k: str(tab_tmp))
 
         assert uvps.uv_safe_path(str(src)) == str(src)
 
