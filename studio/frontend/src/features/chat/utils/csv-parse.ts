@@ -31,7 +31,9 @@ export function parseCsv(text: string): string[][] {
         }
       }
       row.push(cell);
-      if (text[i] === ",") { i++; }
+      // A comma opens the next field. A following newline does that on the next
+      // iteration; at end of file the empty field would otherwise be dropped.
+      if (text[i] === ",") { i++; if (i >= text.length) { row.push(""); finishRow(); } }
       else if (text[i] === "\r") { i++; if (text[i] === "\n") i++; finishRow(); }
       else if (text[i] === "\n") { i++; finishRow(); }
     } else if (text[i] === "\r") {
@@ -49,7 +51,7 @@ export function parseCsv(text: string): string[][] {
         cell += text[i++];
       }
       row.push(cell);
-      if (text[i] === ",") { i++; }
+      if (text[i] === ",") { i++; if (i >= text.length) { row.push(""); finishRow(); } }
       else if (text[i] === "\r") { i++; if (text[i] === "\n") i++; finishRow(); }
       else if (text[i] === "\n") { i++; finishRow(); }
     }
